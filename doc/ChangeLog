@@ -6,13 +6,26 @@ FreeRADIUS 3.0.10 Wed 08 Jul 2015 12:00:00 EDT urgency=medium
 	  module authors will have to do the same.
 	* More documentation on contributing and how to write
 	  modules.
+	* Write HTTP status code resulting from rlm_rest operations
+	  to reply:Rest-HTTP-Status-Code.
 
 	Bug fixes
 	* When using -C, don't error out if the configuration uses
 	  deprecated items.
 	* Fix rlm_files so that there are no collisions when loading
 	  10's of 1000's of users.
-
+	* Fix radclient to use our internal v4/v6 parsing functions.
+	  v6 addresses with ports now work correctly.
+	* Fix sending/receiving packet messages to wrap v6 addresses
+	  in square brackets '[]'.
+	* Check for sasl/sasl.h when building rlm_ldap, and disable
+	  SASL functionality if unavailable.
+	* Fix issue which caused a non \0 terminated buffer to be
+	  assigned to attributes if the value being assigned contained
+	  an invalid escape sequence.
+	* Fix deadlock when reconnecting connections in the connection
+	  pool.
+	  
 FreeRADIUS 3.0.9 Wed 08 Jul 2015 12:00:00 EDT urgency=medium
 	Feature improvements
 	* Make "pool" configurations more consistent, and

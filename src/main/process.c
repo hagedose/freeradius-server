@@ -416,31 +416,39 @@ static void debug_packet(REQUEST *request, RADIUS_PACKET *packet, bool received)
 	 *	This really belongs in a utility library
 	 */
 	if (is_radius_code(packet->code)) {
-		RDEBUG("%s %s Id %i from %s:%i to %s:%i length %zu",
+		RDEBUG("%s %s Id %i from %s%s%s:%i to %s%s%s:%i length %zu",
 		       received ? "Received" : "Sent",
 		       fr_packet_codes[packet->code],
 		       packet->id,
+		       packet->src_ipaddr.af == AF_INET6 ? "[" : "",
 		       inet_ntop(packet->src_ipaddr.af,
 				 &packet->src_ipaddr.ipaddr,
 				 src_ipaddr, sizeof(src_ipaddr)),
+		       packet->src_ipaddr.af == AF_INET6 ? "]" : "",
 		       packet->src_port,
+		       packet->dst_ipaddr.af == AF_INET6 ? "[" : "",
 		       inet_ntop(packet->dst_ipaddr.af,
 				 &packet->dst_ipaddr.ipaddr,
 				 dst_ipaddr, sizeof(dst_ipaddr)),
+		       packet->dst_ipaddr.af == AF_INET6 ? "]" : "",
 		       packet->dst_port,
 		       packet->data_len);
 	} else {
-		RDEBUG("%s code %i Id %i from %s:%i to %s:%i length %zu",
+		RDEBUG("%s code %u Id %i from %s%s%s:%i to %s%s%s:%i length %zu\n",
 		       received ? "Received" : "Sent",
 		       packet->code,
 		       packet->id,
+		       packet->src_ipaddr.af == AF_INET6 ? "[" : "",
 		       inet_ntop(packet->src_ipaddr.af,
 				 &packet->src_ipaddr.ipaddr,
 				 src_ipaddr, sizeof(src_ipaddr)),
+		       packet->src_ipaddr.af == AF_INET6 ? "]" : "",
 		       packet->src_port,
+		       packet->dst_ipaddr.af == AF_INET6 ? "[" : "",
 		       inet_ntop(packet->dst_ipaddr.af,
 				 &packet->dst_ipaddr.ipaddr,
 				 dst_ipaddr, sizeof(dst_ipaddr)),
+		       packet->dst_ipaddr.af == AF_INET6 ? "]" : "",
 		       packet->dst_port,
 		       packet->data_len);
 	}
@@ -805,12 +813,23 @@ static void request_cleanup_delay_init(REQUEST *request)
 	 *	client.  Everything else just gets cleaned up
 	 *	immediately.
 	 */
-	if (!(request->packet->code == PW_CODE_ACCESS_REQUEST)
-#ifdef WITH_COA
-	    || (request->packet->code == PW_CODE_COA_REQUEST)
-	    || (request->packet->code == PW_CODE_DISCONNECT_REQUEST)
+	if (request->packet->dst_port == 0) goto done;
+
+	/*
+	 *	Accounting packets shouldn't be retransmitted.  They
+	 *	should always be updated with Acct-Delay-Time.
+	 */
+#ifdef WITH_ACCOUNTING
+	if (request->packet->code == PW_CODE_ACCOUNTING_REQUEST) goto done;
 #endif
-		) goto done;
+
+#ifdef WITH_DHCP
+	if (request->listener->type == RAD_LISTEN_DHCP) goto done;
+#endif
+
+#ifdef WITH_VMPS
+	if (request->listener->type == RAD_LISTEN_VQP) goto done;
+#endif
 
 	if (!request->root->cleanup_delay) goto done;
 
@@ -2792,7 +2811,6 @@ static int request_will_proxy(REQUEST *request)
 		 */
 	} else if (((vp = fr_pair_find_by_num(request->config, PW_PACKET_DST_IP_ADDRESS, 0, TAG_ANY)) != NULL) ||
 		   ((vp = fr_pair_find_by_num(request->config, PW_PACKET_DST_IPV6_ADDRESS, 0, TAG_ANY)) != NULL)) {
-		VALUE_PAIR *port;
 		uint16_t dst_port;
 		fr_ipaddr_t dst_ipaddr;
 
@@ -2808,8 +2826,8 @@ static int request_will_proxy(REQUEST *request)
 			dst_ipaddr.prefix = 128;
 		}
 
-		port = fr_pair_find_by_num(request->config, PW_PACKET_DST_PORT, 0, TAG_ANY);
-		if (!port) {
+		vp = fr_pair_find_by_num(request->config, PW_PACKET_DST_PORT, 0, TAG_ANY);
+		if (!vp) {
 			if (request->packet->code == PW_CODE_ACCESS_REQUEST) {
 				dst_port = PW_AUTH_UDP_PORT;
 
